@@ -55,16 +55,16 @@ public:
 	uint64_t GetModuleBaseAddress(DWORD procId, const wchar_t* modName);
 
 	template<typename T>
-	bool Read(uint64_t address, T& out);
+	bool Read(uint64_t address, T& out, bool force_read = false);
 
 	template<typename T>
-	bool ReadArray(uint64_t address, T out[], size_t len);
+	bool ReadArray(uint64_t address, T out[], size_t len, bool force_read = false);
 
 	template<typename T>
-	bool Write(uint64_t address, const T& value);
+	bool Write(uint64_t address, const T& value, bool force_write = false);
 
 	template<typename T>
-	bool WriteArray(uint64_t address, const T value[], size_t len);
+	bool WriteArray(uint64_t address, const T value[], size_t len, bool force_write = false);
 
 	uint64_t ScanPointer(uint64_t ptr_address, const uint32_t offsets[], int level);
 
@@ -74,33 +74,83 @@ public:
 };
 
 template<typename T>
-inline bool Memory::Read(uint64_t address, T& out)
+inline bool Memory::Read(uint64_t address, T& out, bool force_read)
 {
 	size_t bytesread = 0;
+
+	if (force_read)
+	{
+		DWORD oldprotect = 0;
+		bool ret = false;
+
+		VirtualProtectEx(proc.hProcess, (LPVOID)address, sizeof(T), PAGE_EXECUTE_READWRITE, &oldprotect);
+		if (ReadProcessMemory(proc.hProcess, (LPCVOID)address, &out, sizeof(T), &bytesread) != 0 && bytesread == sizeof(T))
+			ret = true;
+		VirtualProtectEx(proc.hProcess, (LPVOID)address, sizeof(T), oldprotect, &oldprotect);
+		return ret;
+	}
 
 	return ReadProcessMemory(proc.hProcess, (LPCVOID)address, &out, sizeof(T), &bytesread) != 0 && bytesread == sizeof(T);
 }
 
 template<typename T>
-inline bool Memory::ReadArray(uint64_t address, T out[], size_t len)
+inline bool Memory::ReadArray(uint64_t address, T out[], size_t len, bool force_read)
 {
 	size_t bytesread = 0;
+
+	if (force_read)
+	{
+		DWORD oldprotect = 0;
+		bool ret = false;
+
+		VirtualProtectEx(proc.hProcess, (LPVOID)address, sizeof(T) * len, PAGE_EXECUTE_READWRITE, &oldprotect);	
+		if (ReadProcessMemory(proc.hProcess, (LPCVOID)address, out, sizeof(T) * len, &bytesread) != 0 && bytesread == (sizeof(T) * len))
+			ret = true;
+		VirtualProtectEx(proc.hProcess, (LPVOID)address, sizeof(T) * len, oldprotect, &oldprotect);
+		return ret;
+	}
 
 	return ReadProcessMemory(proc.hProcess, (LPCVOID)address, out, sizeof(T) * len, &bytesread) != 0 && bytesread == (sizeof(T) * len);
 }
 
 template<typename T>
-inline bool Memory::Write(uint64_t address, const T& value)
+inline bool Memory::Write(uint64_t address, const T& value, bool force_write)
 {
 	size_t byteswritten = 0;
+
+	if (force_write)
+	{
+		DWORD oldprotect = 0;
+		bool ret = false;
+
+		VirtualProtectEx(proc.hProcess, (LPVOID)address, sizeof(T), PAGE_EXECUTE_READWRITE, &oldprotect);
+		if (WriteProcessMemory(proc.hProcess, (LPVOID)address, &value, sizeof(T), &byteswritten) != 0 && byteswritten == sizeof(T))
+			ret = true;
+		VirtualProtectEx(proc.hProcess, (LPVOID)address, sizeof(T), oldprotect, &oldprotect);
+
+		return ret;
+	}
 
 	return WriteProcessMemory(proc.hProcess, (LPVOID)address, &value, sizeof(T), &byteswritten) != 0 && byteswritten == sizeof(T);
 }
 
 template<typename T>
-inline bool Memory::WriteArray(uint64_t address, const T value[], size_t len)
+inline bool Memory::WriteArray(uint64_t address, const T value[], size_t len, bool force_write)
 {
 	size_t byteswritten = 0;
+
+	if (force_write)
+	{
+		DWORD oldprotect = 0;
+		bool ret = false;
+
+		VirtualProtectEx(proc.hProcess, (LPVOID)address, sizeof(T) * len, PAGE_EXECUTE_READWRITE, &oldprotect);
+		if (WriteProcessMemory(proc.hProcess, (LPVOID)address, value, sizeof(T) * len, &byteswritten) != 0 && byteswritten == (sizeof(T) * len))
+			ret = true;
+		VirtualProtectEx(proc.hProcess, (LPVOID)address, sizeof(T) * len, oldprotect, &oldprotect);
+
+		return ret;
+	}
 
 	return WriteProcessMemory(proc.hProcess, (LPVOID)address, value, sizeof(T) * len, &byteswritten) != 0 && byteswritten == (sizeof(T) * len);
 }
