@@ -61,22 +61,15 @@ process_status Memory::get_proc_status()
 
 void Memory::check_proc()
 {
-	bool c;
-
-	switch (status)
+	if (status == process_status::FOUND_READY)
 	{
-	case process_status::NOT_FOUND:
-		close_proc();
-		break;
-	case process_status::FOUND_READY:
+		bool c;
+
 		if (!Read<bool>(proc.baseaddr, c))
 		{
 			status = process_status::FOUND_NO_ACCESS;
 			close_proc();
 		}
-		break;
-	default:
-		break;
 	}
 }
 
@@ -99,11 +92,21 @@ void Memory::open_proc(const wchar_t* name)
 					if (proc.hProcess)
 					{
 						proc.baseaddr = GetModuleBaseAddress(entry.th32ProcessID, name);
-						status = process_status::FOUND_READY;
+
+						if (proc.baseaddr)
+						{
+							status = process_status::FOUND_READY;
+						}
+						else
+						{
+							status = process_status::FOUND_NO_ACCESS;
+							close_proc();
+						}
 					}
 					else
 					{
 						status = process_status::FOUND_NO_ACCESS;
+						close_proc();
 					}
 				}
 
@@ -114,6 +117,7 @@ void Memory::open_proc(const wchar_t* name)
 	}
 
 	status = process_status::NOT_FOUND;
+	close_proc();
 
 	CloseHandle(snapshot);
 }
