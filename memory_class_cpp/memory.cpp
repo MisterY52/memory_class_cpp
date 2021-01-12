@@ -85,11 +85,11 @@ void Memory::open_proc(const wchar_t* name)
 		{
 			if (wcscmp(entry.szExeFile, name) == 0)
 			{
-				if (!proc.hProcess)
+				if (proc.hProcess <= 0)
 				{
 					proc.hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, entry.th32ProcessID);
 
-					if (proc.hProcess)
+					if (proc.hProcess > 0)
 					{
 						proc.baseaddr = GetModuleBaseAddress(entry.th32ProcessID, name);
 
@@ -124,12 +124,10 @@ void Memory::open_proc(const wchar_t* name)
 
 void Memory::close_proc()
 {
-	if (proc.hProcess)
-	{
+	if (proc.hProcess > 0)
 		CloseHandle(proc.hProcess);
-		proc.hProcess = NULL;
-		proc.baseaddr = NULL;
-	}
+	proc.hProcess = NULL;
+	proc.baseaddr = NULL;
 }
 
 uint64_t Memory::GetModuleBaseAddress(DWORD procId, const wchar_t* modName)
@@ -221,14 +219,13 @@ uint64_t* Memory::RegionPatternScan(uint64_t start_addr, size_t size, const char
 	BYTE* buffer = NULL;
 	MEMORY_BASIC_INFORMATION mbi = { 0 };
 	uint64_t* result_addr = new uint64_t[max_results]{ 0 };
-	size_t r = 0;
+	size_t r = 0, index = 0, index_sum = 0;
 
 	for (uint64_t addr = start_addr; addr < start_addr + size; addr += mbi.RegionSize)
 	{
 		if (!VirtualQueryEx(proc.hProcess, (LPCVOID)addr, &mbi, sizeof(mbi)))
 		{
-			mbi.RegionSize = 0x1000;
-			continue;
+			break;
 		}
 
 		if (mbi.State != MEM_COMMIT || mbi.Protect == PAGE_NOACCESS || mbi.Protect == PAGE_GUARD)
@@ -243,8 +240,8 @@ uint64_t* Memory::RegionPatternScan(uint64_t start_addr, size_t size, const char
 		if (!ReadArray<BYTE>((uint64_t)mbi.BaseAddress, buffer, mbi.RegionSize))
 			continue;
 
-		size_t index = 0;
-		size_t index_sum = 0;
+		index = 0;
+		index_sum = 0;
 
 		while (index != -1)
 		{
