@@ -96,6 +96,7 @@ void Memory::open_proc(const wchar_t* name)
 						if (proc.baseaddr)
 						{
 							status = process_status::FOUND_READY;
+							proc.pid = entry.th32ProcessID;
 						}
 						else
 						{
@@ -120,6 +121,75 @@ void Memory::open_proc(const wchar_t* name)
 	close_proc();
 
 	CloseHandle(snapshot);
+}
+
+HANDLE Memory::open_thread(DWORD pid)
+{
+	THREADENTRY32 threadEntry = { sizeof(THREADENTRY32) };
+	HANDLE threadHandle = NULL;
+	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS | TH32CS_SNAPTHREAD, 0);
+
+	if (Thread32First(snapshot, &threadEntry))
+	{
+		do
+		{
+			if (threadEntry.th32OwnerProcessID == pid)
+			{
+				CloseHandle(snapshot);
+				return OpenThread(THREAD_ALL_ACCESS, TRUE, threadEntry.th32ThreadID);
+			}
+		} while (Thread32Next(snapshot, &threadEntry));
+	}
+	CloseHandle(snapshot);
+	return 0;
+}
+
+void* Memory::allocate_mem(size_t size, DWORD prot)
+{
+	void* alloc_addr = VirtualAllocEx(proc.hProcess, 0, size, MEM_COMMIT | MEM_RESERVE, prot);
+	if (!alloc_addr)
+	{
+		printf("Can't allocate memory\n");
+		return 0;
+	}
+	return alloc_addr;
+}
+
+bool Memory::free_mem(void* alloc_addr)
+{
+	return VirtualFreeEx(proc.hProcess, alloc_addr, 0, MEM_RELEASE);
+}
+
+bool Memory::execute_payload(byte* payload, size_t p_size, void* payload_addr)
+{
+	WriteArray<byte>((uint64_t)payload_addr, payload, p_size);
+	HANDLE thr = open_thread(proc.pid);
+
+	if (!thr)
+	{
+		printf("Can't open the thread\n");
+		return false;
+	}
+	else
+	{
+		LPVOID NtQueueApcThread = NULL;
+		HMODULE ntdll = GetModuleHandleA("ntdll.dll");
+		if (ntdll)
+			NtQueueApcThread = (LPVOID)GetProcAddress(ntdll, "NtQueueApcThread");
+		if (NtQueueApcThread)
+		{
+			fnNtQueueApcThread ntq = (fnNtQueueApcThread)NtQueueApcThread;
+			PTHREAD_START_ROUTINE apcRoutine = (PTHREAD_START_ROUTINE)payload_addr;
+			ntq(thr, (PAPCFUNC)apcRoutine, nullptr, nullptr, nullptr);
+		}
+		else
+		{
+			printf("Can't execute payload\n");
+		}
+
+		CloseHandle(thr);
+	}
+	return true;
 }
 
 void Memory::close_proc()

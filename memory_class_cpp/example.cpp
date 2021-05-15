@@ -93,5 +93,29 @@ int main()
 		printf("DLL not found\n");
 	}
 
+	//Execute function
+	byte payload[] =
+	{
+		0x48, 0x83, 0xEC, 0x20,										//sub    rsp, 0x20
+		0x48, 0xB8, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, //movabs rax, <fun>
+		0xFF, 0xD0,													//call	 rax
+		0x48, 0x83, 0xC4, 0x20,										//add    rsp, 0x20
+		0xC3														//ret
+	};
+
+	void* alloc_addr = m.allocate_mem(sizeof(payload), PAGE_EXECUTE_READWRITE);
+
+	size_t index = 0;
+	index = findPattern(payload, sizeof(payload), "CC CC CC CC CC CC CC CC"); //<fun>
+	*(uint64_t*)&payload[index] = m.get_proc_baseaddr() + 0x12345;
+
+	uint64_t payload_addr = (uint64_t)alloc_addr;
+
+	if (m.execute_payload(payload, sizeof(payload), (void*)payload_addr))
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds(500));
+	}
+	m.free_mem(alloc_addr);
+
     std::getchar();
 }

@@ -7,3 +7,4 @@
  - Get address from a multi-level pointer
  - Pattern scan
  - Dll injection (LoadLibrary)
+ - Execute a payload (NtQueueApcThread)
